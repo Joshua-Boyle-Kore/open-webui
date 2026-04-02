@@ -485,6 +485,18 @@ def serialize_output(output: list) -> str:
             else:
                 content = f'{content}<details type="reasoning" done="false">\n<summary>Thinking…</summary>\n{display}\n</details>\n'
 
+        elif item_type == 'web_search_call':
+            if content and not content.endswith('\n'):
+                content += '\n'
+
+            status = item.get('status', 'in_progress')
+            is_last_item = idx == len(output) - 1
+
+            if status == 'completed' or not is_last_item:
+                content += f'<details type="web_search_call" done="true">\n<summary>Searched the web</summary>\n</details>\n'
+            else:
+                content += f'<details type="web_search_call" done="false">\n<summary>Searching the web…</summary>\n</details>\n'
+
         elif item_type == 'open_webui:code_interpreter':
             content_stripped, original_whitespace = split_content_and_whitespace(content)
             if is_opening_code_block(content_stripped):
@@ -841,6 +853,46 @@ def handle_responses_streaming_event(
             new_output[output_index] = item
         elif item:
             new_output.append(item)
+        return new_output, {}
+
+    elif event_type in (
+        'response.web_search_call.in_progress',
+        'response.web_search_call.searching',
+        'response.web_search_call.completed',
+    ):
+        item_id = data.get('item_id', '')
+        output_index = data.get('output_index', len(current_output) - 1)
+
+        # Determine status from event suffix
+        if event_type.endswith('.completed'):
+            status = 'completed'
+        elif event_type.endswith('.searching'):
+            status = 'searching'
+        else:
+            status = 'in_progress'
+
+        new_output = list(current_output)
+
+        # Check if we already have this web_search_call item in output
+        existing_index = None
+        for i, existing_item in enumerate(new_output):
+            if existing_item.get('type') == 'web_search_call' and existing_item.get('id') == item_id:
+                existing_index = i
+                break
+
+        web_search_item = {
+            'type': 'web_search_call',
+            'id': item_id,
+            'status': status,
+        }
+
+        if existing_index is not None:
+            new_output[existing_index] = web_search_item
+        elif 0 <= output_index < len(new_output):
+            new_output[output_index] = web_search_item
+        else:
+            new_output.append(web_search_item)
+
         return new_output, {}
 
     elif event_type == 'response.completed':
