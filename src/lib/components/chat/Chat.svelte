@@ -435,12 +435,25 @@
 				} else if (type === 'chat:tasks:cancel') {
 					if (event.message_id === history.currentId) {
 						taskIds = null;
-						// Set all response messages to done
-						for (const messageId of history.messages[message.parentId].childrenIds) {
-							history.messages[messageId].done = true;
+						const parentMsg = history.messages[message.parentId];
+						if (parentMsg) {
+							for (const messageId of parentMsg.childrenIds) {
+								const msg = history.messages[messageId];
+								if (msg && msg.role === 'assistant') {
+									if (!msg.content || msg.content.trim() === '') {
+										msg.content = $i18n.t('Cancelled...');
+									}
+									msg.done = true;
+									history.messages[messageId] = msg;
+								}
+							}
 						}
+						history = history;
 						await processNextInQueue($chatId);
 					} else {
+						if (!message.content || message.content.trim() === '') {
+							message.content = $i18n.t('Cancelled...');
+						}
 						message.done = true;
 					}
 				} else if (type === 'chat:message:delta' || type === 'message') {
@@ -2387,26 +2400,44 @@
 			}
 
 			taskIds = null;
-
-			const responseMessage = history.messages[history.currentId];
-			// Set all response messages to done
-			if (responseMessage.parentId && history.messages[responseMessage.parentId]) {
-				for (const messageId of history.messages[responseMessage.parentId].childrenIds) {
-					history.messages[messageId].done = true;
-				}
-			}
-
-			history.messages[history.currentId] = responseMessage;
-
-			if (autoScroll) {
-				scrollToBottom();
-			}
 		}
 
 		if (generating) {
 			generating = false;
 			generationController?.abort();
 			generationController = null;
+		}
+
+		// Mark all sibling response messages as done; set empty ones to "Cancelled..."
+		const responseMessage = history.messages[history.currentId];
+		if (responseMessage && responseMessage.role === 'assistant') {
+			const parentId = responseMessage.parentId;
+			const parentMessage = parentId ? history.messages[parentId] : null;
+
+			if (parentMessage) {
+				for (const messageId of parentMessage.childrenIds) {
+					const msg = history.messages[messageId];
+					if (msg && msg.role === 'assistant') {
+						if (!msg.content || msg.content.trim() === '') {
+							msg.content = $i18n.t('Cancelled...');
+						}
+						msg.done = true;
+						history.messages[messageId] = msg;
+					}
+				}
+			} else {
+				if (!responseMessage.content || responseMessage.content.trim() === '') {
+					responseMessage.content = $i18n.t('Cancelled...');
+				}
+				responseMessage.done = true;
+				history.messages[history.currentId] = responseMessage;
+			}
+
+			history = history;
+
+			if (autoScroll) {
+				scrollToBottom();
+			}
 		}
 
 		await processNextInQueue($chatId);
