@@ -111,6 +111,12 @@
 						{:else}
 							{$i18n.t('Analyzing...')}
 						{/if}
+					{:else if attributes?.type === 'code_interpreter_call'}
+						{#if attributes?.done === 'true' || messageDone}
+							{$i18n.t('Analyzed')}
+						{:else}
+							{$i18n.t('Analyzing...')}
+						{/if}
 					{:else if attributes?.type === 'web_search_call'}
 						{#if attributes?.done === 'true' || messageDone}
 							{$i18n.t('Searched the web')}
